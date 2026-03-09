@@ -3,79 +3,91 @@
     "owner": "anthropics",
     "repo": "skills",
     "path": "skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 88209
   },
   {
     "owner": "openai",
     "repo": "skills",
     "path": "skills/.curated",
-    "enabled": true
+    "enabled": true,
+    "stars": 13584
   },
   {
     "owner": "vercel-labs",
     "repo": "agent-skills",
     "path": "skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 22518
   },
   {
     "owner": "bmad-code-org",
     "repo": "BMAD-METHOD",
     "path": ".claude/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 39825
   },
   {
     "owner": "martinellich",
     "repo": "aiup-marketplace",
     "path": "aiup-core/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 37
   },
   {
     "owner": "openclaw",
     "repo": "openclaw",
     "path": "skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 289652
   },
   {
     "owner": "microsoft",
     "repo": "GitHub-Copilot-for-Azure",
     "path": "plugin/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 147
   },
   {
     "owner": "microsoft",
     "repo": "skills",
     "path": ".github/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 1662
   },
   {
     "owner": "inference-sh",
     "repo": "skills",
     "path": "skills",
-    "enabled": false
+    "enabled": false,
+    "stars": 127
   },
   {
     "owner": "github",
     "repo": "awesome-copilot",
     "path": "skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 24317
   },
   {
     "owner": "wshobson",
     "repo": "agents",
-    "path": "plugins",
-    "comment": "Special case: */skills",
-    "enabled": true
+    "path": "plugins/*/skills",
+    "enabled": true,
+    "stars": 30804
   },
   {
     "owner": "angelo-v",
     "repo": "opencode-playground",
     "path": ".opencode/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 1
   },
   {
     "owner": "google-gemini",
     "repo": "gemini-cli",
     "path": ".gemini/skills",
-    "enabled": true
+    "enabled": true,
+    "stars": 97046
   }
 ]

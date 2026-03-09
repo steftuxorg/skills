@@ -1,34 +1,25 @@
 #!/usr/bin/env python3
 """
-OpenSkills Agency - GitHub Skills Scraper
-Scrapes SKILL.md files from multiple GitHub repositories
+OpenSkills Agency - Local Skills Processor
+Processes SKILL.md files from locally cloned GitHub repositories
 and generates a JSON data file.
 """
 
 import os
 import re
 import json
+import sys
+import shutil
 import tempfile
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Optional
 from collections import Counter
-from dotenv import load_dotenv
-from github import Github, GithubException, Auth
-import time
 from skill_scanner import SkillScanner
 from skill_scanner.core.analyzers import BehavioralAnalyzer
 
-# Load environment variables
-load_dotenv(Path(__file__).parent.parent / ".env")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
-if not GITHUB_TOKEN:
-    raise ValueError("GITHUB_TOKEN not found in .env file")
-
-# Initialize GitHub client
-auth = Auth.Token(GITHUB_TOKEN)
-g = Github(auth=auth)
+# Note: GITHUB_TOKEN no longer required for main.py
+# Use scripts/populate_metadata.py to update repository metadata
 
 
 # Load repository configurations from repos.json
@@ -67,15 +58,11 @@ LICENSE_PATTERNS = {
 
 def extract_license_from_frontmatter(content: str) -> Optional[str]:
     """Extract license from YAML frontmatter."""
-    frontmatter_match = re.match(
-        r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL
-    )
+    frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if frontmatter_match:
         frontmatter = frontmatter_match.group(1)
         # Look for license field in YAML frontmatter
-        license_match = re.search(
-            r"^license:\s*(.+?)$", frontmatter, re.MULTILINE
-        )
+        license_match = re.search(r"^license:\s*(.+?)$", frontmatter, re.MULTILINE)
         if license_match:
             license_info = license_match.group(1).strip()
             # Remove quotes if present
@@ -88,23 +75,17 @@ def extract_license_from_frontmatter(content: str) -> Optional[str]:
     return None
 
 
-def extract_license_from_file(repo, skill_dir_path: str) -> Optional[str]:
+def extract_license_from_file_local(skill_dir_path: Path) -> Optional[str]:
     """Extract license from LICENSE file in skill directory."""
     try:
-        # Get contents of the skill directory
-        dir_contents = repo.get_contents(skill_dir_path)
-
-        # Look for LICENSE files
-        for item in dir_contents:
-            if item.type == "file" and item.name.upper().startswith("LICENSE"):
-                # Read the LICENSE file
-                license_content = item.decoded_content.decode("utf-8")
+        # Look for LICENSE files (case-insensitive)
+        for license_file in skill_dir_path.glob("LICENSE*"):
+            if license_file.is_file():
+                license_content = license_file.read_text(encoding="utf-8")
 
                 # Extract first or second meaningful line (skip empty lines)
                 lines = [
-                    line.strip()
-                    for line in license_content.split("\n")
-                    if line.strip()
+                    line.strip() for line in license_content.split("\n") if line.strip()
                 ]
 
                 if len(lines) >= 1:
@@ -126,17 +107,14 @@ def extract_license_from_file(repo, skill_dir_path: str) -> Optional[str]:
     return None
 
 
-def extract_license_from_referenced_file(
-    repo, skill_dir_path: str, content: str
+def extract_license_from_referenced_file_local(
+    skill_dir_path: Path, content: str
 ) -> Optional[str]:
     """
     Check SKILL.md content for references to license files (e.g., LICENSE.txt).
     If found, fetch the file and extract the first or second meaningful line.
-    This is used as a fallback when no direct license info is
-    found in SKILL.md.
     """
     # Look for license file references in the content
-    # Pattern: LICENSE.txt, LICENSE.md, etc. in the content
     license_file_pattern = r"\b(LICENSE(?:\.[a-zA-Z0-9]+)?)\b"
     matches = re.findall(license_file_pattern, content, re.IGNORECASE)
 
@@ -146,18 +124,16 @@ def extract_license_from_referenced_file(
     # Try to fetch each referenced license file
     for license_filename in set(matches):  # Use set to avoid duplicates
         try:
-            # Construct the full path to the license file
-            license_path = f"{skill_dir_path}/{license_filename}"
+            license_path = skill_dir_path / license_filename
 
-            # Get the license file from GitHub
-            license_file = repo.get_contents(license_path)
-            license_content = license_file.decoded_content.decode("utf-8")
+            if not license_path.exists():
+                continue
+
+            license_content = license_path.read_text(encoding="utf-8")
 
             # Extract first or second meaningful line (skip empty lines)
             lines = [
-                line.strip()
-                for line in license_content.split("\n")
-                if line.strip()
+                line.strip() for line in license_content.split("\n") if line.strip()
             ]
 
             if len(lines) >= 1:
@@ -179,17 +155,15 @@ def extract_license_from_referenced_file(
     return None
 
 
-def extract_license(
-    content: str, repo, skill_dir_path: str, repo_license: Optional[str] = None
-) -> str:
-    """Extract license information from multiple sources."""
+def extract_license(content: str, skill_dir_path: Path) -> str:
+    """Extract license information from skill sources."""
     # 1. Check YAML frontmatter first
     frontmatter_license = extract_license_from_frontmatter(content)
     if frontmatter_license:
         return frontmatter_license
 
     # 2. Check for LICENSE file in skill directory
-    file_license = extract_license_from_file(repo, skill_dir_path)
+    file_license = extract_license_from_file_local(skill_dir_path)
     if file_license:
         return file_license
 
@@ -198,16 +172,12 @@ def extract_license(
         if re.search(pattern, content, re.IGNORECASE):
             return license_name
 
-    # 4. NEW: Check if SKILL.md references a license file and fetch it
-    referenced_license = extract_license_from_referenced_file(
-        repo, skill_dir_path, content
+    # 4. Check if SKILL.md references a license file and fetch it
+    referenced_license = extract_license_from_referenced_file_local(
+        skill_dir_path, content
     )
     if referenced_license:
         return referenced_license
-
-    # 5. Fall back to repository license
-    if repo_license:
-        return repo_license
 
     return "Unknown"
 
@@ -215,15 +185,11 @@ def extract_license(
 def generate_summary(content: str, max_length: int = 150) -> str:
     """Generate a summary from SKILL.md content."""
     # Check for YAML frontmatter with description field
-    frontmatter_match = re.match(
-        r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL
-    )
+    frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if frontmatter_match:
         frontmatter = frontmatter_match.group(1)
         # Look for description field in YAML frontmatter
-        desc_match = re.search(
-            r"^description:\s*(.+?)$", frontmatter, re.MULTILINE
-        )
+        desc_match = re.search(r"^description:\s*(.+?)$", frontmatter, re.MULTILINE)
         if desc_match:
             description = desc_match.group(1).strip()
             # Remove quotes if present
@@ -272,6 +238,93 @@ def categorize_skill(name: str, content: str, max_tags: int = 5) -> List[str]:
     return tags[:max_tags]
 
 
+def get_latest_commit_local(repo_path: Path, file_path: Path) -> str:
+    """Get latest commit SHA for a file using git log."""
+    try:
+        rel_path = file_path.relative_to(repo_path)
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h", "--", str(rel_path)],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+def find_skill_files_local(repo_path: Path, sparse_path: str) -> List[Dict]:
+    """Find all SKILL.md files in local repository path."""
+    skills = []
+
+    # Check if wildcard path (contains /*/)
+    is_wildcard = "/*/" in sparse_path
+
+    if is_wildcard:
+        # Handle wildcard paths like "plugins/*/skills"
+        # Split by /*/ to get pattern parts
+        parts = sparse_path.split("/*/")
+        if len(parts) == 2:
+            parent_pattern, child_pattern = parts
+            parent_path = repo_path / parent_pattern
+
+            if not parent_path.exists():
+                return skills
+
+            # Find all subdirectories matching the pattern
+            for subdir in parent_path.iterdir():
+                if subdir.is_dir():
+                    skill_base = subdir / child_pattern
+                    if skill_base.exists():
+                        # Look for skill directories within
+                        for skill_dir in skill_base.iterdir():
+                            if skill_dir.is_dir():
+                                skill_md = skill_dir / "SKILL.md"
+                                if skill_md.exists():
+                                    skills.append(
+                                        {
+                                            "name": skill_dir.name,
+                                            "path": str(
+                                                skill_md.relative_to(repo_path)
+                                            ),
+                                            "file_path": skill_md,
+                                        }
+                                    )
+        return skills
+
+    # Regular path handling (no wildcard)
+    # Note: repo_path already points to the sparse checkout result
+    # so we search directly in repo_path, not repo_path/sparse_path
+    base_path = repo_path
+
+    if not base_path.exists():
+        return skills
+
+    # Look for directories containing SKILL.md
+    for item in base_path.iterdir():
+        if item.is_dir():
+            # Check for SKILL.md (case-insensitive)
+            skill_md = None
+            for file in item.iterdir():
+                if file.is_file() and file.name.upper() == "SKILL.MD":
+                    skill_md = file
+                    break
+
+            if skill_md:
+                skills.append(
+                    {
+                        "name": item.name,
+                        "path": str(skill_md.relative_to(repo_path)),
+                        "file_path": skill_md,
+                    }
+                )
+
+    return skills
+
+
 def extract_snyk_labels(snyk_result: Dict) -> Dict:
     """Extract only the 4 specific labels from Snyk scanner output."""
     try:
@@ -298,18 +351,12 @@ def extract_snyk_labels(snyk_result: Dict) -> Dict:
                         if isinstance(labels_dict, dict):
                             # Extract only the 4 required labels
                             return {
-                                "is_public_sink": labels_dict.get(
-                                    "is_public_sink", 0
-                                ),
-                                "destructive": labels_dict.get(
-                                    "destructive", 0
-                                ),
+                                "is_public_sink": labels_dict.get("is_public_sink", 0),
+                                "destructive": labels_dict.get("destructive", 0),
                                 "untrusted_content": labels_dict.get(
                                     "untrusted_content", 0
                                 ),
-                                "private_data": labels_dict.get(
-                                    "private_data", 0
-                                ),
+                                "private_data": labels_dict.get("private_data", 0),
                             }
 
         # If we couldn't find labels in the expected structure, return defaults
@@ -318,7 +365,7 @@ def extract_snyk_labels(snyk_result: Dict) -> Dict:
             "destructive": 0,
             "untrusted_content": 0,
             "private_data": 0,
-            "note": "Labels not found in expected structure",
+            "note": "No security labels returned by Snyk (skill may be safe or requires additional analysis)",
         }
     except Exception as e:
         return {
@@ -328,65 +375,6 @@ def extract_snyk_labels(snyk_result: Dict) -> Dict:
             "untrusted_content": 0,
             "private_data": 0,
         }
-
-
-def find_skill_files(
-    repo, base_path: str, is_wildcard: bool = False
-) -> List[Dict]:
-    """Find all SKILL.md files in a repository path."""
-    skills = []
-
-    try:
-        if is_wildcard:
-            # Handle wildcard paths like plugins/*/skills
-            parts = base_path.split("/*/")
-            if len(parts) == 2:
-                parent_path, child_path = parts
-                try:
-                    contents = repo.get_contents(parent_path)
-                    for item in contents:
-                        if item.type == "dir":
-                            skill_path = (
-                                f"{parent_path}/{item.name}/{child_path}"
-                            )
-                            skills.extend(
-                                find_skill_files(repo, skill_path, False)
-                            )
-                except GithubException:
-                    pass
-            return skills
-
-        # Regular path handling
-        try:
-            contents = repo.get_contents(base_path)
-        except GithubException:
-            print(f"  ⚠️  Path not found: {base_path}")
-            return skills
-
-        # Process contents
-        if not isinstance(contents, list):
-            contents = [contents]
-
-        for content in contents:
-            if content.type == "dir":
-                # Check if this directory contains SKILL.md
-                try:
-                    dir_contents = repo.get_contents(content.path)
-                    for file in dir_contents:
-                        if file.name.upper() == "SKILL.MD":
-                            skills.append({
-                                "name": content.name,
-                                "path": file.path,
-                                "file": file,
-                            })
-                            break
-                except GithubException:
-                    pass
-
-    except Exception as e:
-        print(f"  ❌ Error processing path {base_path}: {e}")
-
-    return skills
 
 
 # Spinner characters emitted by the Snyk CLI progress indicator.
@@ -437,11 +425,8 @@ def _parse_snyk_stdout(stdout: str) -> Dict:
     json_start = stdout.find("{")
     json_end = stdout.rfind("}")
     if json_start != -1 and json_end != -1:
-        raw = stdout[json_start:json_end + 1]
-        clean = "\n".join(
-            ln for ln in raw.split("\n")
-            if not _is_snyk_spinner_line(ln)
-        )
+        raw = stdout[json_start : json_end + 1]
+        clean = "\n".join(ln for ln in raw.split("\n") if not _is_snyk_spinner_line(ln))
         return json.loads(clean)
 
     raise ValueError("No valid JSON found in Snyk output")
@@ -484,9 +469,9 @@ def run_cisco_scan(skill_path: Path) -> Dict:
         }
 
 
-def run_snyk_scan(skill_md_path: Path) -> Dict:
+def run_snyk_scan(skill_path: Path) -> Dict:
     """
-    Run the Snyk agent scanner on *skill_md_path*.
+    Run the Snyk agent scanner on *skill_path* (skill directory).
 
     Returns the four security labels extracted by :func:`extract_snyk_labels`,
     or a dict with an ``error`` key when the scan cannot be completed.
@@ -494,10 +479,9 @@ def run_snyk_scan(skill_md_path: Path) -> Dict:
     cmd = [
         "uvx",
         "snyk-agent-scan@latest",
-        "inspect",
         "--json",
         "--skills",
-        str(skill_md_path),
+        str(skill_path),
     ]
     try:
         result = subprocess.run(
@@ -526,28 +510,23 @@ def run_snyk_scan(skill_md_path: Path) -> Dict:
         return {"error": f"Snyk scanner error: {exc}"}
 
 
-def _download_skill_directory(
-    repo, skill_dir_path: str, skill_path: Path
-) -> None:
+def _copy_skill_directory(skill_dir_path: Path, dest_path: Path) -> None:
     """
-    Download all non-SKILL.md files from *skill_dir_path* into *skill_path*.
+    Copy all non-SKILL.md files from skill directory to destination.
 
     Silently ignores errors so that processing continues with just SKILL.md
     when ancillary files are unavailable.
     """
     try:
-        dir_contents = repo.get_contents(skill_dir_path)
-        for item in dir_contents:
-            if item.type == "file" and item.name.upper() != "SKILL.MD":
-                dest = skill_path / item.name
-                dest.write_bytes(item.decoded_content)
+        for item in skill_dir_path.iterdir():
+            if item.is_file() and item.name.upper() != "SKILL.MD":
+                shutil.copy2(item, dest_path / item.name)
     except Exception:
         pass
 
 
 def _run_scanners(
-    repo,
-    skill_dir_path: str,
+    skill_dir_path: Path,
     skill_name: str,
     content: str,
 ) -> tuple:
@@ -568,10 +547,10 @@ def _run_scanners(
             skill_md_path = skill_path / "SKILL.md"
             skill_md_path.write_text(content, encoding="utf-8")
 
-            _download_skill_directory(repo, skill_dir_path, skill_path)
+            _copy_skill_directory(skill_dir_path, skill_path)
 
             scan_data = run_cisco_scan(skill_path)
-            snyk_data = run_snyk_scan(skill_md_path)
+            snyk_data = run_snyk_scan(skill_path)
 
     except Exception as exc:
         print(f"      ⚠️  Temp directory error: {exc}")
@@ -588,11 +567,11 @@ def _run_scanners(
     return scan_data, snyk_data
 
 
-def scrape_repository(repo_config: Dict) -> List[Dict]:
-    """Scrape skills from a single repository."""
+def process_repository(repo_config: Dict) -> List[Dict]:
+    """Process skills from a locally cloned repository."""
     owner = repo_config["owner"]
     repo_name = repo_config["repo"]
-    path = repo_config["path"]
+    sparse_path = repo_config.get("path", "")
     enabled = repo_config.get("enabled", True)
 
     if not enabled:
@@ -601,99 +580,117 @@ def scrape_repository(repo_config: Dict) -> List[Dict]:
 
     print(f"\n📦 Processing {owner}/{repo_name}")
 
+    # Construct local repository path
+    base_dir = Path(__file__).parent
+    repo_path = base_dir / "repos" / owner / repo_name
+
+    if not repo_path.exists():
+        print(f"  ⚠️  Repository not found locally: {repo_path}")
+        print(f"      Run: ./scripts/update-repos.sh to clone repositories")
+        return []
+
+    # Get metadata from repos.json
+    stars = repo_config.get("stars", 0)
+
+    print(f"  ⭐ Stars: {stars}")
+
+    # Find skills locally
     try:
-        repo = g.get_repo(f"{owner}/{repo_name}")
-
-        stars = repo.stargazers_count
-        repo_license = repo.license.spdx_id if repo.license else None
-
-        print(f"  ⭐ Stars: {stars}")
-        print(f"  📄 License: {repo_license or 'Unknown'}")
-
-        is_wildcard = "/*/" in path
-        skill_files = find_skill_files(repo, path, is_wildcard)
-
-        print(f"  📝 Found {len(skill_files)} skills")
-
-        skills_data = []
-
-        for skill_info in skill_files:
-            try:
-                skill_name = skill_info["name"]
-                skill_file = skill_info["file"]
-
-                content = skill_file.decoded_content.decode("utf-8")
-
-                commits = repo.get_commits(path=skill_file.path)
-                latest_commit = (
-                    commits[0].sha[:7] if commits.totalCount > 0 else "unknown"
-                )
-
-                skill_dir_path = "/".join(skill_file.path.split("/")[:-1])
-
-                license_info = extract_license(
-                    content, repo, skill_dir_path, repo_license
-                )
-                summary = generate_summary(content)
-                tags = categorize_skill(skill_name, content)
-
-                scan_data, snyk_data = _run_scanners(
-                    repo, skill_dir_path, skill_name, content
-                )
-
-                skill_data = {
-                    "name": skill_name,
-                    "creator": owner,
-                    "category": tags,
-                    "summary": summary,
-                    "url": skill_file.html_url,
-                    "license": license_info,
-                    "trust": stars,
-                    "version": latest_commit,
-                    "repo": f"{owner}/{repo_name}",
-                    "security-scanners": {
-                        "cisco-ai-defense": scan_data,
-                        "snyk": snyk_data,
-                    },
-                }
-
-                skills_data.append(skill_data)
-                print(f"    ✓ {skill_name}")
-
-                time.sleep(0.1)  # Rate limiting protection
-
-            except Exception as exc:
-                print(f"    ✗ Error processing {skill_info['name']}: {exc}")
-
-        return skills_data
-
-    except GithubException as exc:
-        print(f"  ❌ Repository error: {exc}")
+        skill_files = find_skill_files_local(repo_path, sparse_path)
+    except Exception as e:
+        print(f"  ❌ Error finding skills: {e}")
         return []
-    except Exception as exc:
-        print(f"  ❌ Unexpected error: {exc}")
-        return []
+
+    print(f"  📝 Found {len(skill_files)} skills")
+
+    skills_data = []
+
+    for skill_info in skill_files:
+        try:
+            skill_name = skill_info["name"]
+            skill_file_path = skill_info["file_path"]
+            skill_rel_path = skill_info["path"]
+
+            # Read content from local file
+            content = skill_file_path.read_text(encoding="utf-8")
+
+            # Get latest commit for this file
+            latest_commit = get_latest_commit_local(repo_path, skill_file_path)
+
+            # Get skill directory path
+            skill_dir_path = skill_file_path.parent
+
+            # Extract metadata
+            license_info = extract_license(content, skill_dir_path)
+            summary = generate_summary(content)
+            tags = categorize_skill(skill_name, content)
+
+            # Run scanners
+            scan_data, snyk_data = _run_scanners(skill_dir_path, skill_name, content)
+
+            # Construct GitHub URL
+            # Assume 'main' as default branch
+            branch = "main"
+            skill_url = (
+                f"https://github.com/{owner}/{repo_name}/blob/{branch}/{skill_rel_path}"
+            )
+
+            skill_data = {
+                "name": skill_name,
+                "creator": owner,
+                "category": tags,
+                "summary": summary,
+                "url": skill_url,
+                "license": license_info,
+                "trust": stars,
+                "version": latest_commit,
+                "repo": f"{owner}/{repo_name}",
+                "security-scanners": {
+                    "cisco-ai-defense": scan_data,
+                    "snyk": snyk_data,
+                },
+            }
+
+            skills_data.append(skill_data)
+            print(f"    ✓ {skill_name}")
+
+        except Exception as exc:
+            print(f"    ✗ Error processing {skill_info['name']}: {exc}")
+
+    return skills_data
 
 
 def main():
-    """Main scraper function."""
+    """Main processor function."""
     print("=" * 60)
-    print("OpenSkills Agency - GitHub Skills Scraper")
+    print("OpenSkills Agency - Local Skills Processor")
     print("=" * 60)
+
+    # Check if repos directory exists
+    base_dir = Path(__file__).parent
+    repos_dir = base_dir / "repos"
+
+    if not repos_dir.exists():
+        print("\n❌ Error: repos/ directory not found")
+        print("   The repos/ directory contains cloned skill repositories.")
+        print("\n   To clone repositories, run:")
+        print("   ./scripts/update-repos.sh")
+        print("\n   Or wait for GitHub Actions to populate it automatically.")
+        sys.exit(1)
 
     all_skills = []
 
     for repo_config in REPOS:
-        skills = scrape_repository(repo_config)
+        skills = process_repository(repo_config)
         all_skills.extend(skills)
-        time.sleep(0.5)  # Be nice to GitHub API
+        # No sleep needed - no API rate limits!
 
     print("\n" + "=" * 60)
     print(f"✅ Total skills collected: {len(all_skills)}")
     print("=" * 60)
 
     # Save to JSON
-    output_path = Path(__file__).parent.parent / "public" / "skills-data.json"
+    output_path = base_dir / "public" / "skills-data.json"
     output_path.parent.mkdir(exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -712,10 +709,7 @@ def main():
     for skill in all_skills:
         all_tags.extend(skill["category"])
     tag_counts = Counter(all_tags)
-    top = ", ".join(
-        f"{tag}({count})"
-        for tag, count in tag_counts.most_common(5)
-    )
+    top = ", ".join(f"{tag}({count})" for tag, count in tag_counts.most_common(5))
     print(f"  - Top categories: {top}")
 
 
