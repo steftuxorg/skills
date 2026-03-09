@@ -51,7 +51,7 @@
     "owner": "inference-sh",
     "repo": "skills",
     "path": "skills",
-    "enabled": true
+    "enabled": false
   },
   {
     "owner": "github",
