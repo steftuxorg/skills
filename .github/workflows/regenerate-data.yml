@@ -1,0 +1,70 @@
+name: Regenerate Skills Data
+
+on:
+  workflow_call:
+  workflow_dispatch:      # Manual trigger
+
+permissions:
+  contents: write
+
+env:
+  GIT_AUTHOR_NAME: github-actions[bot]
+  GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+  GIT_COMMITTER_NAME: github-actions[bot]
+  GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  regenerate-data:
+    name: Regenerate Skills Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run main.py to regenerate data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python main.py
+
+      - name: Check for changes in skills-data.json
+        id: check-data-changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes in skills data"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Skills data updated"
+          fi
+
+      - name: Commit skills data
+        if: steps.check-data-changes.outputs.changed == 'true'
+        run: |
+          git add .
+          git commit -m "Regenerate skills data"
+          git push

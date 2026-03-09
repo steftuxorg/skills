@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 2 * * *'  # Daily at 2 AM UTC
   workflow_dispatch:      # Manual trigger
+    inputs:
+      regenerate_data:
+        description: 'Also regenerate skills data after updating repos'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -99,59 +104,9 @@ jobs:
   regenerate-data:
     name: Regenerate Skills Data
     needs: update-repos
-    runs-on: ubuntu-latest
-    if: always()  # Run even if some repos failed
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull latest changes
-        run: |
-          git pull origin main
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Run main.py to regenerate data
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python main.py
-
-      - name: Check for changes in skills-data.json
-        id: check-data-changes
-        run: |
-          if git diff --quiet; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes in skills data"
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ Skills data updated"
-          fi
-
-      - name: Commit skills data
-        if: steps.check-data-changes.outputs.changed == 'true'
-        run: |
-          git add .
-          git commit -m "Regenerate skills data"
-          git push
+    if: ${{ inputs.regenerate_data == true }}
+    uses: ./.github/workflows/regenerate-data.yml
+    secrets: inherit
 
   report-failures:
     name: Report Failures
