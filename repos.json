@@ -1,0 +1,81 @@
+[
+  {
+    "owner": "anthropics",
+    "repo": "skills",
+    "path": "skills",
+    "enabled": true
+  },
+  {
+    "owner": "openai",
+    "repo": "skills",
+    "path": "skills/.curated",
+    "enabled": true
+  },
+  {
+    "owner": "vercel-labs",
+    "repo": "agent-skills",
+    "path": "skills",
+    "enabled": true
+  },
+  {
+    "owner": "bmad-code-org",
+    "repo": "BMAD-METHOD",
+    "path": ".claude/skills",
+    "enabled": true
+  },
+  {
+    "owner": "martinellich",
+    "repo": "aiup-marketplace",
+    "path": "aiup-core/skills",
+    "enabled": true
+  },
+  {
+    "owner": "openclaw",
+    "repo": "openclaw",
+    "path": "skills",
+    "enabled": true
+  },
+  {
+    "owner": "microsoft",
+    "repo": "GitHub-Copilot-for-Azure",
+    "path": "plugin/skills",
+    "enabled": true
+  },
+  {
+    "owner": "microsoft",
+    "repo": "skills",
+    "path": ".github/skills",
+    "enabled": true
+  },
+  {
+    "owner": "inference-sh",
+    "repo": "skills",
+    "path": "skills",
+    "enabled": true
+  },
+  {
+    "owner": "github",
+    "repo": "awesome-copilot",
+    "path": "skills",
+    "enabled": true
+  },
+  {
+    "owner": "wshobson",
+    "repo": "agents",
+    "path": "plugins",
+    "comment": "Special case: */skills",
+    "enabled": true
+  },
+  {
+    "owner": "angelo-v",
+    "repo": "opencode-playground",
+    "path": ".opencode/skills",
+    "enabled": true
+  },
+  {
+    "owner": "google-gemini",
+    "repo": "gemini-cli",
+    "path": ".gemini/skills",
+    "enabled": true
+  }
+]

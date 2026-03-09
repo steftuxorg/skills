@@ -1,0 +1,4 @@
+requests>=2.31.0
+python-dotenv>=1.0.0
+PyGithub>=2.1.1
+cisco-ai-skill-scanner>=0.1.0

@@ -1,0 +1,217 @@
+name: Update Skills Repositories
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:      # Manual trigger
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  GIT_AUTHOR_NAME: github-actions[bot]
+  GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+  GIT_COMMITTER_NAME: github-actions[bot]
+  GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  prepare:
+    name: Load Repository Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Load repos.json and create matrix
+        id: set-matrix
+        run: |
+          # Read repos.json and filter enabled repos
+          REPOS=$(cat repos.json | jq -c '[.[] | select(.enabled == true)]')
+          echo "matrix=$REPOS" >> $GITHUB_OUTPUT
+          echo "📋 Found $(echo $REPOS | jq 'length') enabled repositories"
+
+  update-repos:
+    name: Update ${{ matrix.owner }}/${{ matrix.repo }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      fail-fast: false  # Continue even if one repo fails
+      max-parallel: 5   # Limit parallel jobs to avoid rate limits
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+
+      - name: Update ${{ matrix.owner }}/${{ matrix.repo }}
+        id: update
+        continue-on-error: true
+        run: |
+          # Run sparse checkout script (outputs to repos/owner/repo/)
+          ./scripts/update-repo.sh \
+            "${{ matrix.owner }}" \
+            "${{ matrix.repo }}" \
+            "${{ matrix.path }}"
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes detected"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected"
+          fi
+
+      - name: Commit changes
+        if: steps.check-changes.outputs.changed == 'true' && steps.update.outcome == 'success'
+        run: |
+          git add .
+          git commit -m "Update ${{ matrix.owner }}/${{ matrix.repo }} skills"
+          git push
+
+      - name: Log failure
+        if: steps.update.outcome == 'failure'
+        run: |
+          echo "::error::Failed to update ${{ matrix.owner }}/${{ matrix.repo }}"
+          mkdir -p /tmp/failures
+          echo "${{ matrix.owner }}/${{ matrix.repo }}" >> /tmp/failures/failed-repos.txt
+
+      - name: Upload failure log
+        if: steps.update.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-repos-${{ matrix.owner }}-${{ matrix.repo }}
+          path: /tmp/failures/failed-repos.txt
+          retention-days: 7
+
+  regenerate-data:
+    name: Regenerate Skills Data
+    needs: update-repos
+    runs-on: ubuntu-latest
+    if: always()  # Run even if some repos failed
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run main.py to regenerate data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python main.py
+
+      - name: Check for changes in skills-data.json
+        id: check-data-changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes in skills data"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Skills data updated"
+          fi
+
+      - name: Commit skills data
+        if: steps.check-data-changes.outputs.changed == 'true'
+        run: |
+          git add .
+          git commit -m "Regenerate skills data"
+          git push
+
+  report-failures:
+    name: Report Failures
+    needs: [update-repos, regenerate-data]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all failure logs
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/failures
+          pattern: failed-repos-*
+          merge-multiple: true
+
+      - name: Create failure report issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const failuresPath = '/tmp/failures/failed-repos.txt';
+            
+            let failedRepos = [];
+            if (fs.existsSync(failuresPath)) {
+              failedRepos = fs.readFileSync(failuresPath, 'utf8')
+                .split('\n')
+                .filter(line => line.trim() !== '');
+            }
+            
+            const date = new Date().toISOString().split('T')[0];
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            
+            let body = `## ⚠️ Skills Update Failed\n\n`;
+            body += `**Date:** ${date}\n`;
+            body += `**Workflow Run:** [View Details](${runUrl})\n\n`;
+            
+            if (failedRepos.length > 0) {
+              body += `### Failed Repositories (${failedRepos.length})\n\n`;
+              failedRepos.forEach(repo => {
+                body += `- ❌ \`${repo}\`\n`;
+              });
+            } else {
+              body += `### Error\n\n`;
+              body += `The workflow failed but no specific repository failures were logged.\n`;
+              body += `This may indicate an issue with the data regeneration step.\n`;
+            }
+            
+            body += `\n### Next Steps\n\n`;
+            body += `1. Check the [workflow run](${runUrl}) for detailed error logs\n`;
+            body += `2. Verify the repository paths in \`repos.json\` are correct\n`;
+            body += `3. Check if any repositories changed their structure\n`;
+            body += `4. Re-run the workflow manually after fixing issues\n`;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Skills Update Failed - ${date}`,
+              body: body,
+              labels: ['automation', 'bug']
+            });
