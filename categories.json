@@ -1,0 +1,112 @@
+{
+  "automation": [
+    "automate",
+    "automation",
+    "workflow",
+    "task",
+    "schedule"
+  ],
+  "development": [
+    "develop",
+    "code",
+    "programming",
+    "build",
+    "compile"
+  ],
+  "testing": [
+    "test",
+    "testing",
+    "qa",
+    "quality",
+    "validation",
+    "verify"
+  ],
+  "deployment": [
+    "deploy",
+    "deployment",
+    "release",
+    "publish",
+    "production"
+  ],
+  "documentation": [
+    "document",
+    "documentation",
+    "docs",
+    "readme",
+    "guide"
+  ],
+  "analysis": [
+    "analyze",
+    "analysis",
+    "inspect",
+    "review",
+    "audit"
+  ],
+  "data-processing": [
+    "data",
+    "process",
+    "transform",
+    "parse",
+    "extract"
+  ],
+  "web-development": [
+    "web",
+    "html",
+    "css",
+    "javascript",
+    "frontend",
+    "backend"
+  ],
+  "security": [
+    "security",
+    "secure",
+    "auth",
+    "authentication",
+    "encryption"
+  ],
+  "monitoring": [
+    "monitor",
+    "monitoring",
+    "observe",
+    "track",
+    "alert"
+  ],
+  "ai": [
+    "ai",
+    "artificial intelligence",
+    "machine learning",
+    "ml",
+    "llm",
+    "agent"
+  ],
+  "database": [
+    "database",
+    "sql",
+    "query",
+    "db",
+    "postgres",
+    "mysql"
+  ],
+  "api": [
+    "api",
+    "rest",
+    "graphql",
+    "endpoint",
+    "service"
+  ],
+  "git": [
+    "git",
+    "github",
+    "version control",
+    "commit",
+    "branch"
+  ],
+  "cloud": [
+    "cloud",
+    "aws",
+    "azure",
+    "gcp",
+    "kubernetes",
+    "docker"
+  ]
+}
