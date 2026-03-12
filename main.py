@@ -68,8 +68,8 @@ def extract_license_from_frontmatter(content: str) -> Optional[str]:
             # Remove quotes if present
             license_info = license_info.strip("\"'")
             if license_info:
-                # Normalize "MIT License" to "MIT"
-                if license_info == "MIT License":
+                # Normalize any license containing "MIT" to just "MIT"
+                if re.search(r"\bMIT\b", license_info, re.IGNORECASE):
                     return "MIT"
                 return license_info
     return None
@@ -96,8 +96,8 @@ def extract_license_from_file_local(skill_dir_path: Path) -> Optional[str]:
                     else:
                         license_text = first_line
 
-                    # Normalize "MIT License" to "MIT"
-                    if license_text == "MIT License":
+                    # Normalize any license containing "MIT" to just "MIT"
+                    if re.search(r"\bMIT\b", license_text, re.IGNORECASE):
                         return "MIT"
                     return license_text
 
@@ -144,8 +144,8 @@ def extract_license_from_referenced_file_local(
                 else:
                     license_text = first_line
 
-                # Normalize "MIT License" to "MIT"
-                if license_text == "MIT License":
+                # Normalize any license containing "MIT" to just "MIT"
+                if re.search(r"\bMIT\b", license_text, re.IGNORECASE):
                     return "MIT"
                 return license_text
 
