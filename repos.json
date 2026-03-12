@@ -21,13 +21,6 @@
     "stars": 22518
   },
   {
-    "owner": "bmad-code-org",
-    "repo": "BMAD-METHOD",
-    "path": ".claude/skills",
-    "enabled": true,
-    "stars": 39825
-  },
-  {
     "owner": "martinellich",
     "repo": "aiup-marketplace",
     "path": "aiup-core/skills",
