@@ -43,4 +43,4 @@ tmp/
 #repos/
 
 # Generated data
-public/skills-data.json
+#public/skills-data.json
