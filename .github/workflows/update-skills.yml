@@ -46,7 +46,7 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
       fail-fast: false  # Continue even if one repo fails
-      max-parallel: 5   # Limit parallel jobs to avoid rate limits
+      max-parallel: 1   # Run sequentially to avoid git conflicts
     
     steps:
       - name: Checkout repository
