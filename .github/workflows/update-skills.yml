@@ -71,12 +71,14 @@ jobs:
       - name: Check for changes
         id: check-changes
         run: |
-          if git diff --quiet; then
+          # Check for both tracked changes and new untracked files
+          if [ -z "$(git status --porcelain)" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "ℹ️ No changes detected"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "✅ Changes detected"
+            git status --short
           fi
 
       - name: Commit changes

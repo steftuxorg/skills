@@ -55,12 +55,14 @@ jobs:
       - name: Check for changes in skills-data.json
         id: check-data-changes
         run: |
-          if git diff --quiet; then
+          # Check for both tracked changes and new untracked files
+          if [ -z "$(git status --porcelain)" ]; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "ℹ️ No changes in skills data"
           else
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "✅ Skills data updated"
+            git status --short
           fi
 
       - name: Commit skills data
