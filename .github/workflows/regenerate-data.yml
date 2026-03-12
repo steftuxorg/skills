@@ -48,6 +48,7 @@ jobs:
       - name: Run main.py to regenerate data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           python main.py
 

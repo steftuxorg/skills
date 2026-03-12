@@ -33,11 +33,14 @@ env/
 *.swo
 *~
 
+#tmp
+tmp/
+
 # Environment variables
 .env
 
 # Cloned repositories (managed by GitHub Actions)
-repos/
+#repos/
 
 # Generated data
 public/skills-data.json
